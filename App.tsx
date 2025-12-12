@@ -25,16 +25,38 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  useEffect(() => {
-    // Force clean state on mount: Always start at Login
-    // This ensures that even if a session is persisted in localStorage, 
-    // we clear it on refresh to force the login screen.
-    const init = async () => {
-        await supabase.auth.signOut();
-    };
-    init();
+  // Session Check State
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
-    // Listener for auth changes (sign out or sign in manually)
+  useEffect(() => {
+    // 1. Check for existing session on app load
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+           const userRole = session.user.user_metadata.role;
+           if (userRole === 'admin') {
+              setRole('admin');
+              setView('dashboard');
+              setAdminName(session.user.user_metadata.name || 'Admin');
+              setAdminEmail(session.user.email || '');
+           } else {
+              setRole('candidate');
+              setCandidateId(session.user.id);
+              setView('candidate-test');
+           }
+        }
+      } catch (error) {
+        console.error("Error checking session:", error);
+      } finally {
+        setIsCheckingSession(false);
+      }
+    };
+
+    checkSession();
+
+    // 2. Listen for auth changes (Login, Logout, Auto-refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
             setRole(null);
@@ -43,6 +65,19 @@ const App: React.FC = () => {
             setCandidateId('');
             setEmail('');
             setPassword('');
+            setView('dashboard'); // Reset view default
+        } else if (event === 'SIGNED_IN' && session?.user) {
+            // Logic handled by handleLogin or checkSession usually, 
+            // but ensuring state sync here covers edge cases
+            const userRole = session.user.user_metadata.role;
+            if (userRole === 'admin') {
+                setRole('admin');
+                setAdminName(session.user.user_metadata.name || 'Admin');
+                setAdminEmail(session.user.email || '');
+            } else {
+                setRole('candidate');
+                setCandidateId(session.user.id);
+            }
         }
     });
 
@@ -117,10 +152,21 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
       await supabase.auth.signOut();
-      // State clear handled by onAuthStateChange
   };
 
-  // 1. Login Screen (No Role)
+  // 1. Loading Screen (Checking Session)
+  if (isCheckingSession) {
+      return (
+          <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4">
+                  <Loader2 className="w-10 h-10 text-emerald-600 animate-spin" />
+                  <p className="text-gray-500 font-medium text-sm">Carregando...</p>
+              </div>
+          </div>
+      );
+  }
+
+  // 2. Login Screen (No Role)
   if (!role) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -187,7 +233,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 2. Candidate View
+  // 3. Candidate View
   if (role === 'candidate') {
     return (
       <CandidateView 
@@ -199,7 +245,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 3. Admin View
+  // 4. Admin View
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar 
