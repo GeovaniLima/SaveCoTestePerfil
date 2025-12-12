@@ -7,7 +7,7 @@ import { CandidateView } from './components/CandidateView';
 import { ResultsAnalysis } from './components/ResultsAnalysis';
 import { AdminUsersList } from './components/AdminUsersList';
 import { ViewState, UserRole } from './types';
-import { Hexagon, Lock, Loader2, AlertCircle } from 'lucide-react';
+import { Hexagon, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
@@ -24,13 +24,17 @@ const App: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
-  
-  // Loading State
-  // Default to false so we show Login immediately instead of loading spinner
-  const [isCheckingSession, setIsCheckingSession] = useState(false);
 
   useEffect(() => {
-    // Listener for auth changes (sign out)
+    // Force clean state on mount: Always start at Login
+    // This ensures that even if a session is persisted in localStorage, 
+    // we clear it on refresh to force the login screen.
+    const init = async () => {
+        await supabase.auth.signOut();
+    };
+    init();
+
+    // Listener for auth changes (sign out or sign in manually)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
             setRole(null);
@@ -113,27 +117,10 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
       await supabase.auth.signOut();
-      // State clear handled by onAuthStateChange or manual here
-      setRole(null);
-      setEmail('');
-      setPassword('');
-      setAdminName('');
-      setAdminEmail('');
+      // State clear handled by onAuthStateChange
   };
 
-  // 1. Loading State (Checking Session) - removed session check logic, this is now fallback only
-  if (isCheckingSession) {
-      return (
-          <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-4">
-                <Loader2 className="w-10 h-10 text-emerald-600 animate-spin" />
-                <p className="text-gray-500 font-medium text-sm">Carregando sistema...</p>
-              </div>
-          </div>
-      );
-  }
-
-  // 2. Login Screen (No Role)
+  // 1. Login Screen (No Role)
   if (!role) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -200,7 +187,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 3. Candidate View
+  // 2. Candidate View
   if (role === 'candidate') {
     return (
       <CandidateView 
@@ -212,7 +199,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 4. Admin View
+  // 3. Admin View
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar 
